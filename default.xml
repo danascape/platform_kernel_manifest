@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+
+  <remote  name="github"
+           fetch=".." />
+
+  <remote  name="aosp" fetch="https://android.googlesource.com" review="https://android-review.googlesource.com/" />
+
+  <default revision="refs/heads/master"
+           remote="aosp"
+           sync-j="4" />
+
+  <project path="build" name="kernel/build" revision="refs/tags/android-10.0.0_r45"/>
+  <project path="private/msm-asus" name="danascape/linux-asus-X00P-3.18" remote="github" revision="master">
+    <linkfile src="build.config" dest="build.config"/>
+  </project>
+  <project path="prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" name="platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" revision="pie-release" clone-depth="1"/>
+  <project path="prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" name="platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" revision="pie-release" clone-depth="1"/>
+  <project path="prebuilts-master/clang/host/linux-x86" name="platform/prebuilts/clang/host/linux-x86" revision="pie-release" clone-depth="1"/>
+  <project path="prebuilts-master/misc" name="platform/prebuilts/misc" revision="pie-release" clone-depth="1"/>
+  <project path="kernel/tests" name="kernel/tests" revision="pie-release"/>
+</manifest>
