@@ -6,6 +6,7 @@
 | ------------ | -------------------- | -------------- | ---------------------------------------------- | ---------------------------- |
 | Asus Max M1  | android-msm-x00p-3.18 | 3.18.140       | 993f59db42c97629bc0346fdc69df52f13a17b3d      | device/asus/X00P-kernel      |
 | Asus Max M2  | android-msm-x01ad-4.9 | 4.9.337        | dfa2b63e34b875e485b4f8033e98b36c21882eb2      | device/asus/X01AD-kernel     |
+| Oneplus Nord N10 | android-msm-billie-4.19 | 4.19.322 | 70485f28ce9307ff3600d6b9f463a8530c8331a3      | device/oneplus/billie-kernel |
 
 ---
 
