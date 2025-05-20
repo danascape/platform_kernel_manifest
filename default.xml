@@ -1,0 +1,21 @@
+<manifest>
+
+  <remote  name="github"
+           fetch=".." />
+
+  <remote  name="aosp" fetch="https://android.googlesource.com" review="https://android-review.googlesource.com/" />
+  <default revision="android-msm-bonito-4.9-android12L"
+    remote="aosp" sync-j="4" />
+
+  <project path="private/msm-asus" name="danascape/linux-asus-X01AD-4.9" remote="github" revision="lineage-20">
+    <linkfile src="build.config.X01AD" dest="build.config" />
+    <linkfile src="build_X01AD.sh" dest="build_X01AD.sh" />
+  </project>
+
+  <project path="build" name="kernel/build" />
+  <project path="prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" name="platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" clone-depth="1" />
+  <project path="prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" name="platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" clone-depth="1" />
+  <project path="prebuilts-master/clang/host/linux-x86" name="platform/prebuilts/clang/host/linux-x86" clone-depth="1" groups="partner" />
+  <project path="prebuilts-master/misc" name="platform/prebuilts/misc" clone-depth="1" />
+</manifest>
+
