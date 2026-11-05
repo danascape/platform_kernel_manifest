@@ -1,0 +1,26 @@
+check-kernel-bindings.sh over ten fresh random seeds, clang r584948c
+(22.0.1), bindgen 0.72.1, against this tree's own bindings_helper.h.
+
+control_wrong   = member offsets Rust gets wrong with randstruct off
+randstruct_wrong= the same count with randstruct on
+records         = how many records disagree
+
+seed  1  a371fd3d619bf010  control_wrong=0  randstruct_wrong=134  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  2  b151612633c33ea1  control_wrong=0  randstruct_wrong=185  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  3  60c75b521863b003  control_wrong=0  randstruct_wrong=185  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  4  8bbd5855965aa2b5  control_wrong=0  randstruct_wrong=225  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  5  71b2cbb0fed8f2c5  control_wrong=0  randstruct_wrong=148  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  6  696698eb9aba7d5a  control_wrong=0  randstruct_wrong=182  records=6  [file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  7  bac114b47e3314ab  control_wrong=0  randstruct_wrong=229  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  8  cc1d17343d89d100  control_wrong=0  randstruct_wrong=237  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed  9  8493d2d7c212604f  control_wrong=0  randstruct_wrong=200  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+seed 10  2c197b1cd985cf7e  control_wrong=0  randstruct_wrong=413  records=7  [cred file inode mm_struct shmem_inode_info task_struct vm_area_struct ]
+
+The control arm is 0 on every seed. The randstruct arm is never 0.
+The count moves between seeds because it depends on where the
+permutation puts the anonymous member, but task_struct, file, inode,
+mm_struct, shmem_inode_info and vm_area_struct are wrong every time.
+cred is wrong on nine of ten: it has a single anonymous member, so one
+seed in a few leaves it where it was declared.
+
+So the defect is structural, not a property of one seed.

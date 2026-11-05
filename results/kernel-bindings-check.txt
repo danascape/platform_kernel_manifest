@@ -1,0 +1,52 @@
+# seed: 38453fbe5155a2b217dea8c53ad8516174fd7bd8178fa8e2255902c530cda535
+
+=== control: randstruct off ===
+records compared        : 691
+member offsets compared : 5355
+member offsets wrong    : 0
+records that disagree   : 0
+
+=== randstruct on ===
+records compared        : 692
+member offsets compared : 5356
+member offsets wrong    : 235
+records that disagree   : 7
+  cred  (7)
+      ucounts: C @0, Rust @16
+      thread_keyring: C @8, Rust @24
+      cap_permitted: C @16, Rust @32
+      cap_ambient: C @24, Rust @40
+      security: C @32, Rust @48
+  file  (26)
+      private_data: C @0, Rust @88
+      f_security: C @8, Rust @96
+      f_lock: C @16, Rust @104
+      f_mode: C @20, Rust @108
+      f_task_work: C @24, Rust @56
+  inode  (63)
+      sizeof: C 688, Rust 696
+      i_rwsem: C @0, Rust @56
+      i_pipe: C @64, Rust @48
+      i_cdev: C @64, Rust @48
+      i_link: C @64, Rust @48
+  mm_struct  (56)
+      arg_start: C @0, Rust @96
+      total_vm: C @8, Rust @104
+      android_vendor_data1: C @16, Rust @112
+      flags: C @24, Rust @120
+      saved_auxv: C @32, Rust @128
+  shmem_inode_info  (2)
+      sizeof: C 808, Rust 816
+      android_vendor_data1: C @800, Rust @808
+  task_struct  (60)
+      __kabi_reserved3: C @64, Rust @72
+      fs: C @72, Rust @80
+      thread: C @80, Rust @96
+      __kabi_reserved6: C @1280, Rust @1296
+      oom_reaper_timer: C @1288, Rust @1304
+  vm_area_struct  (23)
+      swap_readahead_info: C @0, Rust @56
+      vm_file: C @8, Rust @64
+      vm_userfaultfd_ctx: C @16, Rust @72
+      vm_mm: C @24, Rust @80
+      vm_flags: C @32, Rust @16

@@ -1,0 +1,97 @@
+# clang r584948c (the one this tree builds with)
+
+clang   : Android (15323222, +pgo, +bolt, +lto, +mlgo, based on r584948c) clang version 22.0.1 (https://android.googlesource.com/toolchain/llvm-project 2d65e4108033380e6fe8e08b1f1826cd2bfb0c99)
+bindgen : bindgen 0.72.1
+
+######## randstruct off ########
+--- the layout Clang produced ---
+         0 | struct t
+         0 |   long m0
+         8 |   union t::(anonymous) 
+         8 |     int u0
+         8 |     long u1
+        16 |   long m2
+        24 |   long m3
+           | [sizeof=32, align=8]
+--- the struct bindgen gave Rust ---
+pub struct t {
+    pub m0: ::core::ffi::c_long,
+    pub __bindgen_anon_1: t__bindgen_ty_1,
+    pub m2: ::core::ffi::c_long,
+    pub m3: ::core::ffi::c_long,
+}
+
+######## randstruct on ########
+--- the layout Clang produced ---
+         0 | struct t
+         0 |   long m3
+         8 |   long m2
+        16 |   union t::(anonymous) 
+        16 |     int u0
+        16 |     long u1
+        24 |   long m0
+           | [sizeof=32, align=8]
+--- the struct bindgen gave Rust ---
+pub struct t {
+    pub __bindgen_anon_1: t__bindgen_ty_1,
+    pub m3: ::core::ffi::c_long,
+    pub m2: ::core::ffi::c_long,
+    pub m0: ::core::ffi::c_long,
+}
+
+With randstruct off the two agree.
+
+With randstruct on, Clang puts the anonymous union third, at offset 16, and
+bindgen puts it first.  Rust therefore reads m3, m2 and the union's members at
+offsets 8, 16 and 0 where the C side has them at 0, 8 and 16.  Nothing in the
+build catches this: both sides used the same seed, so the randstruct hash in
+vermagic matches.
+
+# clang r596125 (newest in the tree)
+
+clang   : Android (15682573, +pgo, +bolt, +lto, +mlgo, based on r596125) clang version 22.0.2 (https://android.googlesource.com/toolchain/llvm-project de03d430485c884861198b25459851f429cbdbad)
+bindgen : bindgen 0.72.1
+
+######## randstruct off ########
+--- the layout Clang produced ---
+         0 | struct t
+         0 |   long m0
+         8 |   union t::(anonymous) 
+         8 |     int u0
+         8 |     long u1
+        16 |   long m2
+        24 |   long m3
+           | [sizeof=32, align=8]
+--- the struct bindgen gave Rust ---
+pub struct t {
+    pub m0: ::core::ffi::c_long,
+    pub __bindgen_anon_1: t__bindgen_ty_1,
+    pub m2: ::core::ffi::c_long,
+    pub m3: ::core::ffi::c_long,
+}
+
+######## randstruct on ########
+--- the layout Clang produced ---
+         0 | struct t
+         0 |   long m3
+         8 |   long m2
+        16 |   union t::(anonymous) 
+        16 |     int u0
+        16 |     long u1
+        24 |   long m0
+           | [sizeof=32, align=8]
+--- the struct bindgen gave Rust ---
+pub struct t {
+    pub __bindgen_anon_1: t__bindgen_ty_1,
+    pub m3: ::core::ffi::c_long,
+    pub m2: ::core::ffi::c_long,
+    pub m0: ::core::ffi::c_long,
+}
+
+With randstruct off the two agree.
+
+With randstruct on, Clang puts the anonymous union third, at offset 16, and
+bindgen puts it first.  Rust therefore reads m3, m2 and the union's members at
+offsets 8, 16 and 0 where the C side has them at 0, 8 and 16.  Nothing in the
+build catches this: both sides used the same seed, so the randstruct hash in
+vermagic matches.

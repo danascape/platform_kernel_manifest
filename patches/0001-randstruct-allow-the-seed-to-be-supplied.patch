@@ -1,0 +1,67 @@
+From d50c2793e0ba1f44b56ea5846f52182b7efeaaea Mon Sep 17 00:00:00 2001
+From: Saalim Quadri <danascape@gmail.com>
+Date: Thu, 5 Nov 2026 18:27:23 +0530
+Subject: [PATCH 1/2] randstruct: allow the seed to be supplied
+
+scripts/gen-randstruct-seed.sh always draws the seed from /dev/urandom,
+which leaves builders no way to pin it. Two consequences:
+
+  - Builds are not reproducible. Refer to
+    Documentation/kbuild/reproducible-builds.rst.
+
+  - Build systems that invoke make more than once get a different seed
+    each time, so modules are compiled against different structure
+    layouts than the vmlinux they load into. Distributions have hit
+    this before; see NixOS/nixpkgs#53592 for the out-of-tree module case.
+
+Take the seed from $KRANDSTRUCT_SEED, else $KRANDSTRUCT_SEED_FILE, else
+a randstruct.seed at the root of the source tree, else /dev/urandom as
+before. Builds that set none of these are unaffected.
+
+Signed-off-by: Saalim Quadri <danascape@gmail.com>
+---
+ scripts/basic/Makefile         |  5 +++--
+ scripts/gen-randstruct-seed.sh | 10 +++++++++-
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/scripts/basic/Makefile b/scripts/basic/Makefile
+index fb8e2c38fbc7..6cf8b529b11e 100644
+--- a/scripts/basic/Makefile
++++ b/scripts/basic/Makefile
+@@ -6,12 +6,13 @@ hostprogs-always-y	+= fixdep
+ 
+ # randstruct: the seed is needed before building the gcc-plugin or
+ # before running a Clang kernel build.
++KRANDSTRUCT_SEED_FILE ?= $(wildcard $(srctree)/randstruct.seed)
+ gen-randstruct-seed	:= $(srctree)/scripts/gen-randstruct-seed.sh
+ quiet_cmd_create_randstruct_seed = GENSEED $@
+ cmd_create_randstruct_seed = \
+-	$(CONFIG_SHELL) $(gen-randstruct-seed) \
++	KRANDSTRUCT_SEED_FILE=$(KRANDSTRUCT_SEED_FILE) $(CONFIG_SHELL) $(gen-randstruct-seed) \
+ 		$@ $(objtree)/include/generated/randstruct_hash.h
+-$(obj)/randstruct.seed: $(gen-randstruct-seed) FORCE
++$(obj)/randstruct.seed: $(gen-randstruct-seed) $(KRANDSTRUCT_SEED_FILE) FORCE
+ 	$(call if_changed,create_randstruct_seed)
+ always-$(CONFIG_RANDSTRUCT) += randstruct.seed
+ 
+diff --git a/scripts/gen-randstruct-seed.sh b/scripts/gen-randstruct-seed.sh
+index 61017b36c464..6dd90c37aa7e 100755
+--- a/scripts/gen-randstruct-seed.sh
++++ b/scripts/gen-randstruct-seed.sh
+@@ -1,7 +1,15 @@
+ #!/bin/sh
+ # SPDX-License-Identifier: GPL-2.0
+ 
+-SEED=$(od -A n -t x8 -N 32 /dev/urandom | tr -d ' \n')
++if [ -n "$KRANDSTRUCT_SEED" ]; then
++	SEED="$KRANDSTRUCT_SEED"
++elif [ -n "$KRANDSTRUCT_SEED_FILE" ]; then
++	[ -r "$KRANDSTRUCT_SEED_FILE" ] || { echo "randstruct: cannot read $KRANDSTRUCT_SEED_FILE" >&2; exit 1; }
++	SEED=$(tr -d ' \n' < "$KRANDSTRUCT_SEED_FILE")
++	[ -n "$SEED" ] || { echo "randstruct: $KRANDSTRUCT_SEED_FILE is empty" >&2; exit 1; }
++else
++	SEED=$(od -A n -t x8 -N 32 /dev/urandom | tr -d ' \n')
++fi
+ echo "$SEED" > "$1"
+ HASH=$(echo -n "$SEED" | sha256sum | cut -d" " -f1)
+ echo "#define RANDSTRUCT_HASHED_SEED \"$HASH\"" > "$2"

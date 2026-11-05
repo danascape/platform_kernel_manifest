@@ -1,0 +1,105 @@
+RUNTIME RESULT: THE DEVICE DOES NOT BOOT
+
+x86_64 Android emulator (sdk_phone64_x86_64-userdebug, product emu64x),
+kernel 6.18.35-android17-5-gdfed2f01ab79, CONFIG_RANDSTRUCT_FULL=y, seed
+38453fbe5155a2b217dea8c53ad8516174fd7bd8178fa8e2255902c530cda535.
+
+The kernel boots and adb works. Android does not come up: system_server dies
+on startup and zygote restarts in a loop.
+
+  $ adb shell getprop sys.boot_completed      (empty)
+  $ adb shell getprop init.svc.zygote         restarting
+  $ adb shell getprop init.svc.servicemanager running
+  $ adb shell getprop init.svc.surfaceflinger running
+  $ adb shell cat /proc/uptime                212.80 717.93
+
+1. WHAT THE CHECK MODULE REPORTS
+
+samples/rust/rust_randstruct_check.rs prints the offset the C compiler
+assigned (via rust/helpers/randstruct_check.c, so offsetof() as compiled into
+this same kernel) beside the offset Rust computes from the bindings bindgen
+emitted:
+
+  [    9.892424] randstruct check: CONFIG_RANDSTRUCT=true
+  [    9.893535] randstruct check:         member        C     Rust
+  [    9.894687] randstruct check:            pid     1656     1656
+  [    9.896544] randstruct check:           tgid     3804     3804
+  [    9.897934] randstruct check:             mm      376      384  MISMATCH
+  [    9.899228] randstruct check:         sizeof     3840     3840
+  [    9.900517] randstruct check: 1 of 4 disagree -- Rust is reading the wrong addresses
+
+The C column matches what pahole reads from this build's own BTF (pid 1656,
+tgid 3804, mm 376, sizeof 3840), so the static measurement and the running
+kernel agree.
+
+2. WHAT USERSPACE SEES
+
+  E Zygote  : System zygote died with fatal exception
+  E Zygote  : java.lang.RuntimeException: Failed to mmap shared memory: Invalid argument
+  E Zygote  :     at com.android.internal.os.ApplicationSharedMemory.nativeMap(Native Method)
+  E Zygote  :     at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:109)
+  E Zygote  :     at com.android.server.SystemServer.run(SystemServer.java:998)
+  E Zygote  :     at com.android.server.SystemServer.main(SystemServer.java:732)
+
+EINVAL from mmap on the shared memory region system_server sets up for every
+app. It cannot start without it, so it dies, and zygote restarts it forever.
+
+3. THE CHAIN FROM ONE TO TWO
+
+ashmem on 6.18 is Rust: drivers/staging/android/ashmem.rs and shmem.rs. The
+mmap path goes through get_unmapped_area, registered at shmem.rs:214 and
+implemented at shmem.rs:234:
+
+  unsafe extern "C" fn ashmem_vmfile_get_unmapped_area(...) -> c_ulong {
+          #[cfg(not(CONFIG_RANDSTRUCT))]
+          let mm = unsafe { (*bindings::get_current()).mm };
+          #[cfg(CONFIG_RANDSTRUCT)]
+          let mm = unsafe { (*bindings::get_current()).__bindgen_anon_1.mm };
+          // SAFETY: This calls the right get_unmapped_area for a shmem.
+          unsafe { bindings::mm_get_unmapped_area(mm, file, addr, len, pgoff, flags) }
+  }
+
+Under CONFIG_RANDSTRUCT that read lands at offset 384, not 376. What is
+there:
+
+  unsigned long          max_allowed_capacity;  /*   360     8 */
+  struct io_uring_task * io_uring;              /*   368     8 */
+  struct mm_struct *     mm;                    /*   376     8 */
+  struct list_head       migration_node;        /*   384    16 */
+
+migration_node.next -- a pointer into task_struct itself, since an
+initialised list_head points at itself. That value is then passed to
+mm_get_unmapped_area() (mm/mmap.c:885), which takes a struct mm_struct * and
+forwards it to mm_get_unmapped_area_vmflags(). The address returned is not
+usable, and mmap fails with EINVAL.
+
+So: bindgen misplaces the anonymous member -> Rust reads task_struct->mm 8
+bytes high -> ashmem hands a list_head to the mm layer -> ashmem mmap returns
+EINVAL -> system_server cannot allocate its shared memory -> the device never
+finishes booting.
+
+4. WHY IT FAILS LOUDLY HERE
+
+ashmem happens to use the broken member on the boot path, so the failure is an
+EINVAL during startup. The other consumer is quieter:
+binder/page_range.rs:277 does
+
+  ARef::from(&**kernel::current!().mm().ok_or(ESRCH)?)
+
+taking a counted reference on the same pointer. Boot never gets that far. A
+permutation that left mm alone but moved something binder reads would corrupt
+rather than fail.
+
+5. ON SAMPLING A FEW MEMBERS
+
+pid and tgid both agree here, and they are the two members anyone would check
+first. Checking only those gives a clean pass on a kernel that cannot boot.
+On the aarch64 build with the same seed it falls the other way: pid, tgid, mm
+and files all wrong.
+
+Which members disagree depends on where the permutation puts the anonymous
+member, so a spot check of a few proves very little. The upstream RFC
+proposing this Kconfig change reported that it "printed the offset of a couple
+of the task_struct randomized members from both C and Rust independently" and
+that they "seem to match as well from a couple tries". This run shows how that
+happens.

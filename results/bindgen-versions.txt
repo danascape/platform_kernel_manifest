@@ -1,0 +1,66 @@
+check-kernel-bindings.sh with the tree's prebuilt bindgen and with
+bindgen 0.73.2 from crates.io, same clang (r584948c, 22.0.1), same seed,
+same recorded bindgen command from a real build of this tree.
+
+################ bindgen 0.72.1 ################
+=== control: randstruct off ===
+records compared        : 690
+member offsets compared : 5350
+member offsets wrong    : 0
+records that disagree   : 0
+=== randstruct on ===
+records compared        : 691
+member offsets compared : 5351
+member offsets wrong    : 235
+records that disagree   : 7
+  cred  (7)
+  file  (26)
+  inode  (63)
+  mm_struct  (56)
+  shmem_inode_info  (2)
+  task_struct  (60)
+  vm_area_struct  (23)
+
+################ bindgen 0.73.2 ################
+=== control: randstruct off ===
+records compared        : 690
+member offsets compared : 5350
+member offsets wrong    : 0
+records that disagree   : 0
+=== randstruct on ===
+records compared        : 691
+member offsets compared : 5351
+member offsets wrong    : 235
+records that disagree   : 7
+  cred  (7)
+  file  (26)
+  inode  (63)
+  mm_struct  (56)
+  shmem_inode_info  (2)
+  task_struct  (60)
+  vm_area_struct  (23)
+
+The two versions give byte-identical results. 0.73.2 does not fix it.
+
+The libclang pairing was verified rather than assumed, which is the one
+way this test could have produced a clean-looking lie:
+
+  $ LIBCLANG_PATH=<empty dir> bindgen x.h
+  thread 'main' panicked: Unable to find libclang: "couldn't find any
+  valid shared libraries matching: ['libclang.so', ...]"
+
+  $ LIBCLANG_PATH=<prebuilt>/lib strace -e openat bindgen x.h
+  openat(AT_FDCWD, ".../clang-r584948c/lib/libclang.so", O_RDONLY) = 4
+
+so it opens the prebuilt libclang and hard-fails rather than falling
+back to the system libclang 18 that is installed on this machine.
+
+Reading bindgen's main branch says why. In bindgen/ir/comp.rs,
+CompInfo::from_ty appends each CXCursor_FieldDecl in libclang's visit
+order via ci.fields.append_raw_field(field), recording
+cur.offset_of_field() beside it; compute_bitfield_units then groups
+consecutive bitfields without reordering, and the recorded offset is
+consulted only to place bitfields within an allocation unit. Nothing
+reconciles the emitted order against the offsets. That bindgen already
+has the offsets is the encouraging part: a fix has the information it
+needs.

@@ -1,0 +1,198 @@
+From b681236f04ed53b815381a0d06111c6f03e1c11e Mon Sep 17 00:00:00 2001
+From: Saalim Quadri <danascape@gmail.com>
+Date: Thu, 5 Nov 2026 22:39:46 +0530
+Subject: [PATCH 2/2] rust: handle the randomized task_struct layout
+
+CONFIG_RANDSTRUCT expands randomized_struct_fields_start to "struct {",
+so the randomizable portion of task_struct becomes an anonymous struct.
+bindgen names that member __bindgen_anon_1 and Rust has to go through it.
+
+Wrap the affected accessors in #[cfg(CONFIG_RANDSTRUCT)]: pid(), tgid(),
+policy(), normal_prio(), has_mm(), mm() and group_leader() in the kernel
+crate, and the flags, files, personality and mm reads in the Rust binder,
+wrapfd and ashmem drivers.
+
+This makes RANDSTRUCT and Rust build together.
+
+Signed-off-by: Saalim Quadri <danascape@gmail.com>
+---
+ drivers/android/binder/deferred_close.rs | 12 +++++--
+ drivers/android/wrapfd/wrap.rs           |  6 +++-
+ drivers/staging/android/ashmem.rs        |  3 ++
+ drivers/staging/android/shmem.rs         |  3 ++
+ rust/kernel/task.rs                      | 41 +++++++++++++++++++++---
+ 5 files changed, 58 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/android/binder/deferred_close.rs b/drivers/android/binder/deferred_close.rs
+index ac895c04d0cb..b8a4becb179b 100644
+--- a/drivers/android/binder/deferred_close.rs
++++ b/drivers/android/binder/deferred_close.rs
+@@ -71,7 +71,11 @@ pub(crate) fn close_fd(self, fd: u32) -> Result<(), DeferredFdCloseError> {
+ 
+         // Check if this is a kthread.
+         // SAFETY: Reading `flags` from a task is always okay.
+-        if unsafe { ((*current.as_ptr()).flags & bindings::PF_KTHREAD) != 0 } {
++        #[cfg(not(CONFIG_RANDSTRUCT))]
++        let flags = unsafe { (*current.as_ptr()).flags };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let flags = unsafe { (*current.as_ptr()).__bindgen_anon_1.flags };
++        if (flags & bindings::PF_KTHREAD) != 0 {
+             return Err(DeferredFdCloseError::TaskWorkUnavailable);
+         }
+ 
+@@ -145,7 +149,11 @@ pub(crate) fn close_fd(self, fd: u32) -> Result<(), DeferredFdCloseError> {
+         // `current->files`.
+         //
+         // Note: fl_owner_t is currently a void pointer.
+-        unsafe { bindings::filp_close(file, (*current).files as bindings::fl_owner_t) };
++        #[cfg(not(CONFIG_RANDSTRUCT))]
++        let files = unsafe { (*current).files };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let files = unsafe { (*current).__bindgen_anon_1.files };
++        unsafe { bindings::filp_close(file, files as bindings::fl_owner_t) };
+ 
+         // We update the file pointer that the task work is supposed to fput. This transfers
+         // ownership of our last refcount.
+diff --git a/drivers/android/wrapfd/wrap.rs b/drivers/android/wrapfd/wrap.rs
+index b1a77834f56a..e89fb5eb19d7 100644
+--- a/drivers/android/wrapfd/wrap.rs
++++ b/drivers/android/wrapfd/wrap.rs
+@@ -731,7 +731,11 @@ fn defer(self) -> Result<()> {
+ 
+         // Check if this is a kthread.
+         // SAFETY: Reading `flags` from a task is always okay.
+-        if unsafe { ((*current.as_ptr()).flags & bindings::PF_KTHREAD) != 0 } {
++        #[cfg(not(CONFIG_RANDSTRUCT))]
++        let flags = unsafe { (*current.as_ptr()).flags };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let flags = unsafe { (*current.as_ptr()).__bindgen_anon_1.flags };
++        if (flags & bindings::PF_KTHREAD) != 0 {
+             return Err(ENOTSUPP);
+         }
+ 
+diff --git a/drivers/staging/android/ashmem.rs b/drivers/staging/android/ashmem.rs
+index 8d4e156d40e5..e04b4282b399 100644
+--- a/drivers/staging/android/ashmem.rs
++++ b/drivers/staging/android/ashmem.rs
+@@ -62,7 +62,10 @@
+ /// Does PROT_READ imply PROT_EXEC for this task?
+ fn read_implies_exec(task: &Task) -> bool {
+     // SAFETY: Always safe to read.
++    #[cfg(not(CONFIG_RANDSTRUCT))]
+     let personality = unsafe { (*task.as_ptr()).personality };
++    #[cfg(CONFIG_RANDSTRUCT)]
++    let personality = unsafe { (*task.as_ptr()).__bindgen_anon_1.personality };
+     (personality & bindings::READ_IMPLIES_EXEC) != 0
+ }
+ 
+diff --git a/drivers/staging/android/shmem.rs b/drivers/staging/android/shmem.rs
+index 7d7b27f31dbf..54522967c0c0 100644
+--- a/drivers/staging/android/shmem.rs
++++ b/drivers/staging/android/shmem.rs
+@@ -239,7 +239,10 @@ extern "C" fn ashmem_vmfile_mmap(
+     flags: c_ulong,
+ ) -> c_ulong {
+     // SAFETY: The `mm` of current does not change, so it is safe to access.
++    #[cfg(not(CONFIG_RANDSTRUCT))]
+     let mm = unsafe { (*bindings::get_current()).mm };
++    #[cfg(CONFIG_RANDSTRUCT)]
++    let mm = unsafe { (*bindings::get_current()).__bindgen_anon_1.mm };
+     // SAFETY: This calls the right get_unmapped_area for a shmem.
+     unsafe { bindings::mm_get_unmapped_area(mm, file, addr, len, pgoff, flags) }
+ }
+diff --git a/rust/kernel/task.rs b/rust/kernel/task.rs
+index 37b14a86f15e..98ab8ce3f10b 100644
+--- a/rust/kernel/task.rs
++++ b/rust/kernel/task.rs
+@@ -208,14 +208,26 @@ pub fn as_ptr(&self) -> *mut bindings::task_struct {
+     pub fn pid(&self) -> Pid {
+         // SAFETY: The pid of a task never changes after initialization, so reading this field is
+         // not a data race.
+-        unsafe { *ptr::addr_of!((*self.as_ptr()).pid) }
++        unsafe {
++            #[cfg(not(CONFIG_RANDSTRUCT))]
++            let pid = ptr::addr_of!((*self.as_ptr()).pid);
++            #[cfg(CONFIG_RANDSTRUCT)]
++            let pid = ptr::addr_of!((*self.as_ptr()).__bindgen_anon_1.pid);
++            *pid
++        }
+     }
+ 
+     /// Returns the TGID (Thread Group ID / Process ID) of the given task.
+     pub fn tgid(&self) -> Pid {
+         // SAFETY: The tgid of a task never changes after initialization, so reading this field is
+         // not a data race.
+-        unsafe { *ptr::addr_of!((*self.as_ptr()).tgid) }
++        unsafe {
++            #[cfg(not(CONFIG_RANDSTRUCT))]
++            let tgid = ptr::addr_of!((*self.as_ptr()).tgid);
++            #[cfg(CONFIG_RANDSTRUCT)]
++            let tgid = ptr::addr_of!((*self.as_ptr()).__bindgen_anon_1.tgid);
++            *tgid
++        }
+     }
+ 
+     /// Returns the UID of the given task.
+@@ -292,7 +304,13 @@ pub fn policy(&self) -> u32 {
+         // This uses a volatile read because C code may be modifying this field in parallel using
+         // non-atomic unsynchronized writes. This corresponds to how the C macro READ_ONCE is
+         // implemented.
+-        unsafe { core::ptr::addr_of!((*self.0.get()).policy).read_volatile() }
++        unsafe {
++            #[cfg(not(CONFIG_RANDSTRUCT))]
++            let policy = core::ptr::addr_of!((*self.0.get()).policy);
++            #[cfg(CONFIG_RANDSTRUCT)]
++            let policy = core::ptr::addr_of!((*self.0.get()).__bindgen_anon_1.policy);
++            policy.read_volatile()
++        }
+     }
+ 
+     /// Returns the current normal priority.
+@@ -303,7 +321,13 @@ pub fn normal_prio(&self) -> i32 {
+         // This uses a volatile read because C code may be modifying this field in parallel using
+         // non-atomic unsynchronized writes. This corresponds to how the C macro READ_ONCE is
+         // implemented.
+-        unsafe { core::ptr::addr_of!((*self.0.get()).normal_prio).read_volatile() }
++        unsafe {
++            #[cfg(not(CONFIG_RANDSTRUCT))]
++            let normal_prio = core::ptr::addr_of!((*self.0.get()).normal_prio);
++            #[cfg(CONFIG_RANDSTRUCT)]
++            let normal_prio = core::ptr::addr_of!((*self.0.get()).__bindgen_anon_1.normal_prio);
++            normal_prio.read_volatile()
++        }
+     }
+ 
+     /// Get the rlimit value for RTPRIO.
+@@ -359,7 +383,10 @@ pub fn has_mm(&self) -> bool {
+         // This uses a volatile read because C code may be modifying this field in parallel using
+         // non-atomic unsynchronized writes. This corresponds to how the C macro READ_ONCE is
+         // implemented.
++        #[cfg(not(CONFIG_RANDSTRUCT))]
+         let mm = unsafe { core::ptr::addr_of!((*self.as_ptr()).mm).read_volatile() };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let mm = unsafe { core::ptr::addr_of!((*self.as_ptr()).__bindgen_anon_1.mm).read_volatile() };
+         !mm.is_null()
+     }
+ }
+@@ -372,7 +399,10 @@ impl CurrentTask {
+     pub fn mm(&self) -> Option<&MmWithUser> {
+         // SAFETY: The `mm` field of `current` is not modified from other threads, so reading it is
+         // not a data race.
++        #[cfg(not(CONFIG_RANDSTRUCT))]
+         let mm = unsafe { (*self.as_ptr()).mm };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let mm = unsafe { (*self.as_ptr()).__bindgen_anon_1.mm };
+ 
+         if mm.is_null() {
+             return None;
+@@ -431,7 +461,10 @@ pub fn active_pid_ns(&self) -> Option<&PidNamespace> {
+     pub fn group_leader(&self) -> &Task {
+         // SAFETY: The group leader of a task never changes while the task is running, and `self`
+         // is the current task, which is guaranteed running.
++        #[cfg(not(CONFIG_RANDSTRUCT))]
+         let ptr = unsafe { (*self.as_ptr()).group_leader };
++        #[cfg(CONFIG_RANDSTRUCT)]
++        let ptr = unsafe { (*self.as_ptr()).__bindgen_anon_1.group_leader };
+ 
+         // SAFETY: `current->group_leader` stays valid for at least the duration in which `current`
+         // is running, and the signature of this function ensures that the returned `&Task` can

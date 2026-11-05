@@ -1,0 +1,28 @@
+Two //common:kernel_aarch64_abi_dist builds of the same tree, differing
+only by the randstruct series.  Both used clang r584948c (22.0.1).
+
+seed                       : 38453fbe5155a2b217dea8c53ad8516174fd7bd8178fa8e2255902c530cda535
+vermagic, randstruct build : 6.18.35-android17-5-gc494bb840aef-4k SMP preempt mod_unload modversions aarch64RANDSTRUCT_00135b09fe1adef9d8fa57b2309a0ec62fa37af07f431d80e3a255f96268b4b2
+vermagic, control build    : 6.18.35-android17-5-gac1eaa7cdcbd-4k SMP preempt mod_unload modversions aarch64
+
+Image size   : 40643072 -> 40647168  (+4096 bytes)
+
+Exported symbols and their modversion CRCs:
+  symbols exported         : 10050 (identical set in both builds)
+  symbols added or removed : 0
+  CRCs that changed        : 6612
+  of the 9718 KMI symbols   : 6364 CRCs changed
+
+Structure layouts, from the BTF of each vmlinux:
+  named struct/union types in BTF : 11645
+  types whose layout changed      : 273
+    of those, marked __randomize_layout in source : 60
+    remainder, randomized by Clang's own rule for
+    records made only of function pointers        : 213
+
+stg against android17-6.18's gki/aarch64/abi.stg:
+  control build   : 16 types changed, 28 member offsets moved
+  randstruct build: 384 types changed, 3774 member offsets moved
+  function and variable symbols added or removed: identical in both
+  (that difference is this tree's own config delta against stock AOSP,
+   not randstruct; the control build shows it too)

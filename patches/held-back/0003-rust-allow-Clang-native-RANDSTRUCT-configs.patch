@@ -1,0 +1,69 @@
+From d6fe4872a02d988e950605aa95ed5d9725ea6da2 Mon Sep 17 00:00:00 2001
+From: Saalim Quadri <danascape@gmail.com>
+Date: Thu, 5 Nov 2026 22:40:10 +0530
+Subject: [PATCH 3/4] rust: allow Clang-native RANDSTRUCT configs
+
+*** Do not apply. Recorded with the measurement showing it does not work.
+
+CONFIG_RUST has carried "depends on !RANDSTRUCT" since 2f7ab1267dc9
+("Kbuild: add Rust support"), which predates Clang's randstruct. Clang
+reorders the FieldDecl chain, which libclang reports, so the dependency
+looks stale. It is not.
+
+bindgen emits an anonymous struct or union member of a randomized record
+first, at offset 0, rather than where Clang put it:
+
+  struct t {
+          long m0;
+          union { int u0; long u1; };
+          long m2;
+          long m3;
+  } __randomize_layout;
+
+  Clang    m3 @0  m2 @8  union @16  m0 @24
+  bindgen  union @0  m3 @8  m2 @16  m0 @24
+
+With randstruct off it is placed correctly. Reproduced with bindgen 0.72.1
+and 0.73.2 against clang 22.0.1 and 22.0.2.
+
+Comparing clang -fdump-record-layouts against rustc's layout of the emitted
+bindings over rust/bindings/bindings_helper.h, 5350 member offsets with
+randstruct off disagree nowhere; with it on, 235 of 5351 disagree, in cred,
+file, inode, mm_struct, shmem_inode_info, task_struct and vm_area_struct.
+Over ten seeds the off arm is 0 every time and the on arm ranges 134 to 413.
+
+An x86_64 emulator kernel with this and CONFIG_RANDSTRUCT_FULL=y does not
+finish booting. ashmem_vmfile_get_unmapped_area() reads current->mm, which
+sits at 376 while Rust reads 384 -- migration_node -- and passes it to
+mm_get_unmapped_area(). mmap returns EINVAL and system_server dies in a loop:
+
+  E Zygote: java.lang.RuntimeException: Failed to mmap shared memory: Invalid argument
+  E Zygote:   at com.android.internal.os.ApplicationSharedMemory.nativeMap(Native Method)
+
+pid and tgid agreed on that kernel, so a spot check of a few members passes.
+vermagic does not catch it either: the hash covers the seed, which both sides
+agreed on.
+
+Gating on CC_IS_CLANG is still the right shape, but not until bindgen places
+anonymous members at their randomized offsets and the build checks it did.
+
+Link: https://lkml.iu.edu/2411.2/03251.html
+Signed-off-by: Saalim Quadri <danascape@gmail.com>
+---
+ init/Kconfig | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/init/Kconfig b/init/Kconfig
+index 602f9b330b76..01e479ac5999 100644
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -2129,8 +2129,7 @@ config RUST
+ 	depends on RUST_IS_AVAILABLE
+ 	select EXTENDED_MODVERSIONS if MODVERSIONS
+ 	depends on !MODVERSIONS || GENDWARFKSYMS
+-	depends on !GCC_PLUGIN_RANDSTRUCT
+-	depends on !RANDSTRUCT
++	depends on !RANDSTRUCT || CC_IS_CLANG
+ 	depends on !DEBUG_INFO_BTF || (PAHOLE_HAS_LANG_EXCLUDE && !LTO)
+ 	depends on !CFI || HAVE_CFI_ICALL_NORMALIZE_INTEGERS_RUSTC
+ 	select CFI_ICALL_NORMALIZE_INTEGERS if CFI

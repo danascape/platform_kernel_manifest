@@ -1,0 +1,25 @@
+task_struct members read by the kernel crate and the Rust Android
+drivers, as the C compiler placed them and as Rust believes they are.
+
+--- randstruct off ---
+    pid            C @1816   Rust @1816  
+    tgid           C @1820   Rust @1820  
+    mm             C @1688   Rust @1688  
+    flags          C @68     Rust @68    
+    group_leader   C @1880   Rust @1880  
+    policy         C @1352   Rust @1352  
+    normal_prio    C @160    Rust @160   
+    files          C @2376   Rust @2376  
+    personality    C @1736   Rust @1736  
+
+--- randstruct on ---
+    pid            C @1632   Rust @1648     <-- wrong
+    tgid           C @1864   Rust @1880     <-- wrong
+    mm             C @1592   Rust @1608     <-- wrong
+    flags          C @2868   Rust @2868  
+    group_leader   C @4320   Rust @4320  
+    policy         C @2792   Rust @2792  
+    normal_prio    C @2836   Rust @2836  
+    files          C @1368   Rust @1384     <-- wrong
+    personality    C @2844   Rust @2844  
+

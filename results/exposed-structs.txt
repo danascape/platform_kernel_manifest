@@ -1,0 +1,16 @@
+randomized records containing an anonymous aggregate member: 15
+  cpuinfo_x86                                arch/x86/include/asm/processor.h:124
+  cred                                       include/linux/cred.h:111
+  file                                       include/linux/fs.h:1211
+  file_lock                                  include/linux/filelock.h:112
+  inode                                      include/linux/fs.h:793
+  mm_struct (anonymous member)               include/linux/mm_types.h:951
+  mnt_namespace                              fs/mount.h:10
+  mount                                      fs/mount.h:43
+  proc_dir_entry                             fs/proc/internal.h:31
+  proto                                      include/net/sock.h:1271
+  task_security_struct                       security/selinux/include/objsec.h:48
+  task_struct                                include/linux/sched.h:847
+  tty_struct                                 include/linux/tty.h:189
+  vm_area_struct                             include/linux/mm_types.h:814
+  vm_area_struct                             tools/testing/vma/vma_internal.h:317
