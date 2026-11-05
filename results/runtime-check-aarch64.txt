@@ -1,0 +1,32 @@
+aarch64, booted under QEMU rather than the Android emulator: the Android
+emulator refused arm64 on an x86_64 host ("QEMU2 emulator does not support
+arm64 CPU architecture"). The check runs from an initcall, so no Android
+userspace is needed.
+
+  Q=<platform-tree>/prebuilts/android-emulator/trusty-x86_64/bin/qemu-system-aarch64
+  $Q -M virt -cpu max -smp 2 -m 2048 -nographic \
+     -kernel common_dist/Image \
+     -append "console=ttyAMA0 earlycon panic=-1 nokaslr"
+
+That prebuilt is plain QEMU 10.0.0. It boots to a root-filesystem panic and,
+with panic=-1, loops; the check has already printed by then.
+
+  [    0.000000][    T0] Linux version 6.18.35-android17-5-g54bb350f602a-4k (kleaf@build-host) (Android (15323222, +pgo, +bolt, +lto, +mlgo, based on r584948c) clang version 22.0.1 (https://android.googlesource.com/toolchain/llvm-project 2d65e4108033380e6fe8e08b1f1826cd2bfb0c99), LLD 22.0.1 (/mnt/disks/build-disk/src/googleplex-android/llvm-r584948-release/out/llvm-project/llvm 2d65e4108033380e6fe8e08b1f1826cd2bfb0c99)) #1 SMP PREEMPT Thu Nov  5 12:03:18 UTC 2026
+
+  [    0.593441][    T1] rust_randstruct_check: randstruct check: CONFIG_RANDSTRUCT=true
+  [    0.593591][    T1] rust_randstruct_check: randstruct check:         member        C     Rust
+  [    0.593815][    T1] rust_randstruct_check: randstruct check:            pid     1632     1648  MISMATCH
+  [    0.593979][    T1] rust_randstruct_check: randstruct check:           tgid     1864     1880  MISMATCH
+  [    0.593993][    T1] rust_randstruct_check: randstruct check:             mm     1592     1608  MISMATCH
+  [    0.594015][    T1] rust_randstruct_check: randstruct check:         sizeof     4736     4736
+  [    0.594041][    T1] rust_randstruct_check: randstruct check: 3 of 4 disagree -- Rust is reading the wrong addresses
+
+Offsets match what the static check predicted for this seed
+(task-struct-fields.txt): pid 1632/1648, tgid 1864/1880, mm 1592/1608.
+
+Three of four rows against one of four on x86_64, same seed. Which members
+move depends on where the permutation puts the anonymous member, which is why
+sampling a few proves little: on x86_64 pid and tgid both agreed.
+
+No Android stack was booted here, so there is no system_server failure to
+observe on this arch; the x86_64 run covers that.

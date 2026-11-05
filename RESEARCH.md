@@ -225,9 +225,25 @@ struct list_head       migration_node;        /*   384    16 */
 EINVAL, `ApplicationSharedMemory.create()` throws, and `system_server` dies.
 
 `pid` and `tgid` agreed on that kernel. They are the two members anyone checks
-first, and checking only those passes on a kernel that cannot boot. The same
-seed on aarch64 falls the other way, with `pid`, `tgid`, `mm` and `files` all
-wrong. Which members move depends on the permutation.
+first, and checking only those passes on a kernel that cannot boot.
+
+aarch64 with the same seed falls the other way
+(`results/runtime-check-aarch64.txt`):
+
+```
+randstruct check:            pid     1632     1648  MISMATCH
+randstruct check:           tgid     1864     1880  MISMATCH
+randstruct check:             mm     1592     1608  MISMATCH
+randstruct check:         sizeof     4736     4736
+```
+
+Three of four rather than one of four, and both runs match what the static
+check predicted. Which members move depends on where the permutation puts the
+anonymous member.
+
+The Android emulator refused arm64 on an x86_64 host, but the check runs from
+an initcall, so `qemu-system-aarch64` with `-kernel Image` and no root
+filesystem is enough.
 
 The quieter consumer is `binder/page_range.rs:277`:
 
@@ -387,7 +403,8 @@ fixed, public, and weaker than the per-boot randomization already in the tree.
 
 ## Not tested
 
-- aarch64 never booted. Built only.
+- aarch64 booted under QEMU with no userspace, so no Android-level failure
+  was observed there. Not booted on hardware.
 - Reproducibility unproven. `Image` is
   `a512aba4db78ef53ede616ec6e7a4141dadd2a69f4689a99f558bf186dea6e62` for the
   series without the test commit; confirming it needs `bazel clean --expunge`

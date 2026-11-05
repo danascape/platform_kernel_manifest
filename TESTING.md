@@ -4,7 +4,7 @@
 |---|---|
 | newer bindgen | done — 0.73.2 behaves as 0.72.1, `results/bindgen-versions.txt` |
 | multiple seeds | done — ten seeds, `results/ten-seeds.txt` |
-| boot | done on x86_64, `results/runtime-check.txt`. aarch64 built, not booted |
+| boot | done, both arches: `results/runtime-check.txt`, `results/runtime-check-aarch64.txt` |
 | reproducibility | not done |
 | KUnit / LTP | not done, see below |
 
@@ -113,6 +113,22 @@ Expected C column on the x86_64 build with this seed: `pid` 1656, `tgid` 3804,
 For the control, build from `ac1eaa7cdcbd` with only the test commit
 cherry-picked, keeping the fragment. `CONFIG_RANDSTRUCT=false` and four
 agreeing rows.
+
+### aarch64 without Android
+
+The Android emulator refuses arm64 on an x86_64 host. The check runs from an
+initcall, so a bare kernel boot is enough:
+
+```
+Q=/home/saalim/os/gos/os/prebuilts/android-emulator/trusty-x86_64/bin/qemu-system-aarch64
+ARCH=aarch64 common/build_generic.sh
+$Q -M virt -cpu max -smp 2 -m 2048 -nographic \
+   -kernel common_dist/Image \
+   -append "console=ttyAMA0 earlycon panic=-1 nokaslr" | grep -i -A6 'randstruct check'
+```
+
+That prebuilt is plain QEMU 10.0.0. It panics for want of a root filesystem
+and, with `panic=-1`, loops, so take the first iteration and stop it.
 
 ## Reproducibility
 
